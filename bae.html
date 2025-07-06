@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Birthday!</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Pacifico&display=swap" rel="stylesheet">
+    <style>
+        /* Basic body styling to remove default margins and hide overflow for the canvas */
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevents scrollbars if canvas or elements go slightly out of bounds */
+            font-family: 'Playfair Display', serif; /* Primary font for the page */
+        }
+        /* Styling for the background canvas, ensuring it covers the entire viewport */
+        #background-canvas {
+            position: fixed; /* Fixed position to stay in place during scrolling (though overflow is hidden) */
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1; /* Puts the canvas behind other content */
+        }
+        /* Custom font class for specific elements */
+        .font-pacifico {
+            font-family: 'Pacifico', cursive;
+        }
+        /* Custom spinner for loading state - currently not used but kept for potential future use */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #ff69b4; /* Pink color for the spinner */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite; /* Spin animation */
+            display: none; /* Hidden by default */
+        }
+        .spinner.show {
+            display: inline-block; /* Shows the spinner when 'show' class is added */
+        }
+        /* Keyframe animation for the spinner */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-pink-50">
+
+    <!-- Canvas for animated background hearts and image -->
+    <canvas id="background-canvas"></canvas>
+
+    <!-- Main content container, centered vertically and horizontally -->
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <!-- Card-like container for the birthday message -->
+        <div class="bg-white/80 backdrop-blur-sm p-8 md:p-12 rounded-3xl shadow-2xl text-center max-w-lg w-full transform transition-all duration-500 hover:scale-105 border border-pink-100">
+            
+            <!-- Main Title: Happy Birthday -->
+            <h1 class="font-pacifico text-4xl md:text-5xl text-pink-500 mb-4">
+                Happy Birthday
+            </h1>
+            
+            <!-- Heart Divider: A decorative element with a heart SVG -->
+            <div class="flex justify-center items-center my-6">
+                <div class="w-1/4 h-px bg-pink-200"></div>
+                <svg class="w-8 h-8 text-pink-400 mx-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+                <div class="w-1/4 h-px bg-pink-200"></div>
+            </div>
+
+            <!-- Main Birthday Message Display Area -->
+            <p id="birthday-message" class="text-2xl md:text-3xl text-gray-700 leading-relaxed mb-8">
+                <!-- Message content will be set by JavaScript on DOMContentLoaded -->
+            </p>
+            
+            <!-- Signature -->
+            <p class="text-xl md:text-2xl text-gray-600 mt-8">
+                All my love,
+            </p>
+            <p class="font-pacifico text-3xl md:text-4xl text-pink-400 mt-2">
+                Papa Bear 🤎
+            </p>
+
+            <!-- Music Controls -->
+            <div class="mt-8 flex justify-center items-center">
+                <audio id="background-music" autoplay>
+                    <!-- Audio source for background music -->
+                    <source src="https://audio.jukehost.co.uk/qMrAtJQLlpO5wDzBPrGOjvZG89Nb6djj" type="audio/mpeg">
+                    Your browser does not support the audio element.
+                </audio>
+                <!-- Play/Pause button for the music -->
+                <button id="play-pause-btn" class="bg-pink-300 hover:bg-pink-400 text-white font-bold py-2 px-4 rounded-full shadow-md transition-all duration-200 flex items-center" aria-label="Toggle background music playback">
+                    <span id="play-icon" class="hidden">▶️ Play Music</span>
+                    <span id="pause-icon">⏸️ Pause Music</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Canvas Animation Setup ---
+        const canvas = document.getElementById('background-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set initial canvas dimensions to cover the window
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        let particles = []; // Array to store all animated objects (hearts and images)
+
+        // Global image variable for the floating image
+        const floatingImage = new Image();
+        floatingImage.src = 'https://i.ibb.co/TDPBq0fD/1000055173-11zon.png';
+        let imageLoaded = false;
+        let animationStarted = false; // Flag to ensure animation loop starts only once
+
+        /**
+         * Heart object constructor.
+         * @param {number} x - Initial x-coordinate.
+         * @param {number} y - Initial y-coordinate.
+         * @param {number} size - Size of the heart.
+         * @param {number} speed - Vertical speed of the heart.
+         * @param {number} opacity - Transparency of the heart (0 to 1).
+         * @param {string} color - CSS color string for the heart.
+         */
+        function Heart(x, y, size, speed, opacity, color) {
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.speed = speed;
+            this.opacity = opacity;
+            this.color = color;
+            this.type = 'heart'; // Identifier for type of particle
+        }
+
+        /**
+         * Draws a heart shape on the canvas.
+         * The heart is drawn relative to its (x, y) position and size.
+         */
+        Heart.prototype.draw = function() {
+            ctx.save(); // Save the current canvas state
+            ctx.globalAlpha = this.opacity; // Set transparency
+            ctx.fillStyle = this.color; // Set fill color
+
+            ctx.beginPath(); // Start a new path
+            
+            // Drawing the heart shape using quadratic curves
+            ctx.moveTo(this.x, this.y + this.size / 4);
+            ctx.quadraticCurveTo(this.x, this.y, this.x + this.size / 4, this.y);
+            ctx.quadraticCurveTo(this.x + this.size / 2, this.y, this.x + this.size / 2, this.y + this.size / 4);
+            ctx.quadraticCurveTo(this.x + this.size / 2, this.y, this.x + this.size * 3 / 4, this.y);
+            ctx.quadraticCurveTo(this.x + this.size, this.y, this.x + this.size, this.y + this.size / 4);
+            ctx.quadraticCurveTo(this.x + this.size, this.y + this.size / 2, this.x + this.size * 3 / 4, this.y + this.size * 3/4);
+            ctx.lineTo(this.x + this.size / 2, this.y + this.size);
+            ctx.lineTo(this.x + this.size / 4, this.y + this.size * 3/4);
+            ctx.quadraticCurveTo(this.x, this.y + this.size / 2, this.x, this.y + this.size / 4);
+            
+            ctx.fill(); // Fill the heart shape
+            ctx.restore(); // Restore the canvas state
+        };
+
+        /**
+         * ImageParticle object constructor.
+         * @param {number} x - Initial x-coordinate.
+         * @param {number} y - Initial y-coordinate.
+         * @param {number} size - Desired width of the image.
+         * @param {number} speed - Vertical speed of the image.
+         * @param {number} opacity - Transparency of the image (0 to 1).
+         * @param {HTMLImageElement} img - The Image object to draw.
+         */
+        function ImageParticle(x, y, size, speed, opacity, img) {
+            this.x = x;
+            this.y = y;
+            this.size = size; // This will be the target width
+            this.speed = speed;
+            this.opacity = opacity;
+            this.img = img;
+            this.type = 'image'; // Identifier for type of particle
+        }
+
+        /**
+         * Draws the image on the canvas, maintaining its aspect ratio.
+         */
+        ImageParticle.prototype.draw = function() {
+            // Only draw if the image is fully loaded and has natural dimensions
+            if (this.img.complete && this.img.naturalWidth !== 0) {
+                ctx.save();
+                ctx.globalAlpha = this.opacity;
+
+                // Calculate proportional height based on the desired width (this.size)
+                const aspectRatio = this.img.naturalWidth / this.img.naturalHeight;
+                const drawWidth = this.size;
+                const drawHeight = this.size / aspectRatio;
+
+                // Draw the image at its position with calculated dimensions
+                ctx.drawImage(this.img, this.x, this.y, drawWidth, drawHeight);
+                ctx.restore();
+            }
+        };
+
+        /**
+         * Updates the particle's position and resets it if it goes off-screen.
+         * This method is shared by both Heart and ImageParticle.
+         */
+        function updateParticle() {
+            this.y -= this.speed; // Move particle upwards
+            // If particle goes off the top of the screen, reset its position to the bottom
+            if (this.y + this.size < 0) {
+                this.y = height + this.size; // Reset to bottom
+                this.x = Math.random() * width; // Random x position
+                
+                // Re-calculate size and other properties for a new cycle
+                if (this.type === 'heart') {
+                    this.size = Math.random() * 20 + 10; // New random size for hearts
+                    this.speed = Math.random() * 1 + 0.5; // New random speed
+                    this.opacity = Math.random() * 0.5 + 0.2; // New random opacity
+                } else if (this.type === 'image') {
+                    const baseHeartSize = Math.random() * 20 + 10; // Get a random base size from heart range
+                    this.size = baseHeartSize * 2; // Image size is 2x bigger than hearts
+                    this.speed = Math.random() * 1 + 0.5;
+                    this.opacity = Math.random() * 0.5 + 0.2;
+                }
+            }
+        }
+
+        // Assign the shared update method to both prototypes
+        Heart.prototype.update = updateParticle;
+        ImageParticle.prototype.update = updateParticle;
+
+        /**
+         * Initializes or re-initializes the array of particle objects (hearts and images).
+         */
+        function createParticles() {
+            particles = []; // Clear existing particles
+            const heartColors = ['#ffc0cb', '#ffb6c1', '#ff69b4', '#ff1493', '#db7093']; // Shades of pink
+            const numHearts = 50; // Number of hearts
+            const numImages = 5;  // Number of images
+
+            // Create heart particles
+            for (let i = 0; i < numHearts; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const size = Math.random() * 20 + 10; // Size between 10 and 30
+                const speed = Math.random() * 1 + 0.5; // Speed between 0.5 and 1.5
+                const opacity = Math.random() * 0.5 + 0.2; // Opacity between 0.2 and 0.7
+                const color = heartColors[Math.floor(Math.random() * heartColors.length)]; // Random pink color
+                particles.push(new Heart(x, y, size, speed, opacity, color));
+            }
+
+            // Create image particles only if the image has loaded successfully
+            if (imageLoaded) {
+                for (let i = 0; i < numImages; i++) {
+                    const x = Math.random() * width;
+                    const y = Math.random() * height;
+                    const baseHeartSize = Math.random() * 20 + 10; // Use a base heart size for scaling
+                    const imageSize = baseHeartSize * 2; // Image is 2 times bigger than the base heart size
+                    const speed = Math.random() * 1 + 0.5;
+                    const opacity = Math.random() * 0.5 + 0.2;
+                    particles.push(new ImageParticle(x, y, imageSize, speed, opacity, floatingImage));
+                }
+            }
+        }
+
+        /**
+         * The main animation loop. Clears the canvas, updates particle positions, and redraws them.
+         */
+        function animate() {
+            ctx.clearRect(0, 0, width, height); // Clear the entire canvas
+            particles.forEach(particle => {
+                particle.update(); // Update particle's position
+                particle.draw();   // Draw particle on the canvas
+            });
+            requestAnimationFrame(animate); // Request the next animation frame
+        }
+
+        /**
+         * Function to start the animation and create particles.
+         * Ensures this process happens only once.
+         */
+        function startAnimationAndParticles() {
+            if (!animationStarted) {
+                createParticles(); // Create particles (including images if loaded)
+                animate(); // Start the animation loop
+                animationStarted = true;
+            }
+        }
+
+        // Handle window resize events to make the canvas responsive
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            createParticles(); // Re-create particles for the new size and distribution
+        });
+
+        // Event listener for when the floating image finishes loading
+        floatingImage.onload = () => {
+            imageLoaded = true;
+            startAnimationAndParticles(); // Start animation once image is ready
+        };
+
+        // Handle error if image fails to load
+        floatingImage.onerror = () => {
+            console.error("Failed to load floating image. Proceeding without it.");
+            imageLoaded = true; // Still set to true to allow animation to start
+            startAnimationAndParticles();
+        };
+
+        // Check if image is already loaded (e.g., from browser cache)
+        if (floatingImage.complete && floatingImage.naturalWidth !== 0) {
+            imageLoaded = true;
+            startAnimationAndParticles(); // If already loaded, start immediately
+        }
+
+
+        // --- Music Playback Control ---
+        const backgroundMusic = document.getElementById('background-music');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+
+        let isPlaying = false; // Flag to track music playback state
+
+        /**
+         * Updates the text and visibility of the play/pause button based on music state.
+         */
+        function updatePlayPauseButton() {
+            if (backgroundMusic.paused) {
+                playIcon.classList.remove('hidden'); // Show play icon
+                pauseIcon.classList.add('hidden');   // Hide pause icon
+                isPlaying = false;
+            } else {
+                playIcon.classList.add('hidden');    // Hide play icon
+                pauseIcon.classList.remove('hidden'); // Show pause icon
+                isPlaying = true;
+            }
+        }
+
+        // Add click listener to the play/pause button
+        playPauseBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                backgroundMusic.pause(); // Pause the music if currently playing
+            } else {
+                // Attempt to play the music. Use .catch() to handle autoplay policy errors.
+                backgroundMusic.play().catch(error => {
+                    console.error("Autoplay prevented:", error);
+                    // Optionally, provide user feedback that autoplay was blocked
+                    // e.g., display a message: "Browser prevented music autoplay. Please click play."
+                });
+            }
+            updatePlayPauseButton(); // Update button state after click
+        });
+
+        // Add event listeners to the audio element to keep the button state in sync
+        backgroundMusic.addEventListener('play', updatePlayPauseButton);
+        backgroundMusic.addEventListener('pause', updatePlayPauseButton);
+
+        // --- Initial Document Load Setup ---
+        // Ensures DOM is fully loaded before manipulating elements
+        document.addEventListener('DOMContentLoaded', () => {
+            // Set the initial birthday message content
+            document.getElementById('birthday-message').innerHTML = `To my honey bunny sweetie,<br><br>I'm so grateful you were born, and that you're on earth at the same time as me.`;
+            
+            // Initial check for music state (important if autoplay works immediately or if user navigates back)
+            updatePlayPauseButton();
+        });
+
+    </script>
+
+</body>
+</html>
